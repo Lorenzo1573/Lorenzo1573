@@ -48,10 +48,10 @@ bool modeActive = false;
 
 void setup() {
   Serial.begin(9600);
-  // Pin default attivi: D2, D3, D8
-  pinMode(PIN_ENCODER_FWD, OUTPUT);
-  pinMode(PIN_ENCODER_BWD, OUTPUT);
-  pinMode(PIN_MUTE, OUTPUT);
+  // Pin default attivi: D2, D3, D8 - idle HIGH (Pioneer legge resistenza verso GND)
+  pinMode(PIN_ENCODER_FWD, OUTPUT);  digitalWrite(PIN_ENCODER_FWD, HIGH);
+  pinMode(PIN_ENCODER_BWD, OUTPUT);  digitalWrite(PIN_ENCODER_BWD, HIGH);
+  pinMode(PIN_MUTE, OUTPUT);         digitalWrite(PIN_MUTE, HIGH);
   // D4 bistabile: inizia inattivo (LOW)
   pinMode(PIN_MODE_BI, OUTPUT);
   digitalWrite(PIN_MODE_BI, LOW);
@@ -59,11 +59,11 @@ void setup() {
   pinMode(PIN_ENCODER_FWD_ALT, INPUT);
   pinMode(PIN_ENCODER_BWD_ALT, INPUT);
   pinMode(PIN_MUTE_ALT, INPUT);
-  // Altri tasti
-  pinMode(PIN_SOURCE_PLUS, OUTPUT);
-  pinMode(PIN_SOURCE_MINUS, OUTPUT);
-  pinMode(PIN_VOL_PLUS, OUTPUT);
-  pinMode(PIN_VOL_MINUS, OUTPUT);
+  // Altri tasti - idle HIGH
+  pinMode(PIN_SOURCE_PLUS, OUTPUT);  digitalWrite(PIN_SOURCE_PLUS, HIGH);
+  pinMode(PIN_SOURCE_MINUS, OUTPUT); digitalWrite(PIN_SOURCE_MINUS, HIGH);
+  pinMode(PIN_VOL_PLUS, OUTPUT);     digitalWrite(PIN_VOL_PLUS, HIGH);
+  pinMode(PIN_VOL_MINUS, OUTPUT);    digitalWrite(PIN_VOL_MINUS, HIGH);
   Serial.println("Sistema avviato - Mode OFF");
 }
 
@@ -139,9 +139,10 @@ void electronicControl(int pin) {
     else if (pin == PIN_ENCODER_BWD) activePin = PIN_ENCODER_BWD_ALT;
     else if (pin == PIN_MUTE)        activePin = PIN_MUTE_ALT;
   }
-  digitalWrite(activePin, HIGH);
-  delay(PULSE_DURATION);
+  // Idle=HIGH, impulso=LOW: il Pioneer legge la resistenza collegata al pin durante il LOW
   digitalWrite(activePin, LOW);
+  delay(PULSE_DURATION);
+  digitalWrite(activePin, HIGH);
 }
 
 // Toggles D4 bistabile: 1° press → ON (D2/D3/D8 hi-z, D5/D6/D7 OUTPUT)
@@ -154,10 +155,10 @@ void handleMode() {
     pinMode(PIN_ENCODER_FWD, INPUT);
     pinMode(PIN_ENCODER_BWD, INPUT);
     pinMode(PIN_MUTE, INPUT);
-    // D5, D6, D7 diventano uscite attive
-    pinMode(PIN_ENCODER_FWD_ALT, OUTPUT);
-    pinMode(PIN_ENCODER_BWD_ALT, OUTPUT);
-    pinMode(PIN_MUTE_ALT, OUTPUT);
+    // D5, D6, D7 diventano uscite attive (idle HIGH)
+    pinMode(PIN_ENCODER_FWD_ALT, OUTPUT); digitalWrite(PIN_ENCODER_FWD_ALT, HIGH);
+    pinMode(PIN_ENCODER_BWD_ALT, OUTPUT); digitalWrite(PIN_ENCODER_BWD_ALT, HIGH);
+    pinMode(PIN_MUTE_ALT, OUTPUT);        digitalWrite(PIN_MUTE_ALT, HIGH);
     // Attiva D4 bistabile
     modeActive = true;
     digitalWrite(PIN_MODE_BI, HIGH);
@@ -173,9 +174,9 @@ void deactivateMode() {
   pinMode(PIN_ENCODER_FWD_ALT, INPUT);
   pinMode(PIN_ENCODER_BWD_ALT, INPUT);
   pinMode(PIN_MUTE_ALT, INPUT);
-  // D2, D3, D8 tornano uscite attive
-  pinMode(PIN_ENCODER_FWD, OUTPUT);
-  pinMode(PIN_ENCODER_BWD, OUTPUT);
-  pinMode(PIN_MUTE, OUTPUT);
+  // D2, D3, D8 tornano uscite attive (idle HIGH)
+  pinMode(PIN_ENCODER_FWD, OUTPUT); digitalWrite(PIN_ENCODER_FWD, HIGH);
+  pinMode(PIN_ENCODER_BWD, OUTPUT); digitalWrite(PIN_ENCODER_BWD, HIGH);
+  pinMode(PIN_MUTE, OUTPUT);        digitalWrite(PIN_MUTE, HIGH);
   Serial.println("Mode OFF - D4 inattivo, funzioni tornate su D2/D3/D8");
 }
