@@ -18,8 +18,8 @@ Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 #define PIN_ENCODER_FWD      2  // Encoder Forward
 #define PIN_ENCODER_BWD      3  // Encoder Backward
 
-// Mode monostabile e pin alternativi (attivi quando D4 è HIGH)
-#define PIN_MODE_MONO        4  // D4 - Uscita monostabile Mode (tasto 8)
+// Mode bistabile e pin alternativi (attivi quando D4 è HIGH)
+#define PIN_MODE_BI          4  // D4 - Uscita bistabile Mode (tasto 8: toggle ON/OFF)
 #define PIN_ENCODER_FWD_ALT  5  // D5 - Alt Encoder Forward  (quando D4 attivo)
 #define PIN_ENCODER_BWD_ALT  6  // D6 - Alt Encoder Backward (quando D4 attivo)
 #define PIN_MUTE_ALT         7  // D7 - Alt Mute             (quando D4 attivo)
@@ -31,8 +31,8 @@ Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 #define PIN_VOL_PLUS     11 // Vol +      - Tasto 7 (A2+A3)
 #define PIN_VOL_MINUS    13 // Vol -      - Tasto 9 (A2+A5)
 
-// Durata del monostabile D4 in ms
-#define MONOSTABLE_DURATION 150
+// Durata impulso di controllo in ms
+#define PULSE_DURATION 150
 
 // Encoder position tracking
 // 0 = not yet initialized
@@ -43,9 +43,8 @@ Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 // Backward sequence: A->C->B->A  (1->3->2->1)
 int encoderPos = 0;
 
-// Stato monostabile D4
+// Stato bistabile D4
 bool modeActive = false;
-unsigned long modeStartTime = 0;
 
 void setup() {
   Serial.begin(9600);
@@ -53,9 +52,9 @@ void setup() {
   pinMode(PIN_ENCODER_FWD, OUTPUT);
   pinMode(PIN_ENCODER_BWD, OUTPUT);
   pinMode(PIN_MUTE, OUTPUT);
-  // D4 monostabile: inizia inattivo (LOW)
-  pinMode(PIN_MODE_MONO, OUTPUT);
-  digitalWrite(PIN_MODE_MONO, LOW);
+  // D4 bistabile: inizia inattivo (LOW)
+  pinMode(PIN_MODE_BI, OUTPUT);
+  digitalWrite(PIN_MODE_BI, LOW);
   // Pin alternativi D5, D6, D7: iniziano in alta impedenza
   pinMode(PIN_ENCODER_FWD_ALT, INPUT);
   pinMode(PIN_ENCODER_BWD_ALT, INPUT);
@@ -69,11 +68,6 @@ void setup() {
 }
 
 void loop() {
-  // Controlla scadenza monostabile D4 (gestione overflow millis())
-  if (modeActive && millis() - modeStartTime >= MONOSTABLE_DURATION) {
-    deactivateMode();
-  }
-
   char key = keypad.getKey();
   if (key != NO_KEY) {
     Serial.print("Tasto: ");
@@ -146,31 +140,35 @@ void electronicControl(int pin) {
     else if (pin == PIN_MUTE)        activePin = PIN_MUTE_ALT;
   }
   digitalWrite(activePin, HIGH);
-  delay(MONOSTABLE_DURATION);
+  delay(PULSE_DURATION);
   digitalWrite(activePin, LOW);
 }
 
-// Attiva D4 monostabile: D2/D3/D8 → alta impedenza, D5/D6/D7 → OUTPUT
+// Toggles D4 bistabile: 1° press → ON (D2/D3/D8 hi-z, D5/D6/D7 OUTPUT)
+//                        2° press → OFF (D5/D6/D7 hi-z, D2/D3/D8 OUTPUT)
 void handleMode() {
-  // D2, D3, D8 passano in alta impedenza
-  pinMode(PIN_ENCODER_FWD, INPUT);
-  pinMode(PIN_ENCODER_BWD, INPUT);
-  pinMode(PIN_MUTE, INPUT);
-  // D5, D6, D7 diventano uscite attive
-  pinMode(PIN_ENCODER_FWD_ALT, OUTPUT);
-  pinMode(PIN_ENCODER_BWD_ALT, OUTPUT);
-  pinMode(PIN_MUTE_ALT, OUTPUT);
-  // Attiva D4 monostabile e avvia il timer
-  modeActive = true;
-  modeStartTime = millis();
-  digitalWrite(PIN_MODE_MONO, HIGH);
-  Serial.println("Mode ON - D4 attivo, funzioni su D5/D6/D7");
+  if (modeActive) {
+    deactivateMode();
+  } else {
+    // D2, D3, D8 passano in alta impedenza
+    pinMode(PIN_ENCODER_FWD, INPUT);
+    pinMode(PIN_ENCODER_BWD, INPUT);
+    pinMode(PIN_MUTE, INPUT);
+    // D5, D6, D7 diventano uscite attive
+    pinMode(PIN_ENCODER_FWD_ALT, OUTPUT);
+    pinMode(PIN_ENCODER_BWD_ALT, OUTPUT);
+    pinMode(PIN_MUTE_ALT, OUTPUT);
+    // Attiva D4 bistabile
+    modeActive = true;
+    digitalWrite(PIN_MODE_BI, HIGH);
+    Serial.println("Mode ON - D4 attivo, funzioni su D5/D6/D7");
+  }
 }
 
-// Disattiva D4: D5/D6/D7 → alta impedenza, D2/D3/D8 → OUTPUT
+// Disattiva D4 bistabile: D5/D6/D7 → alta impedenza, D2/D3/D8 → OUTPUT
 void deactivateMode() {
   modeActive = false;
-  digitalWrite(PIN_MODE_MONO, LOW);
+  digitalWrite(PIN_MODE_BI, LOW);
   // D5, D6, D7 tornano in alta impedenza
   pinMode(PIN_ENCODER_FWD_ALT, INPUT);
   pinMode(PIN_ENCODER_BWD_ALT, INPUT);
