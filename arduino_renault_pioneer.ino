@@ -14,17 +14,25 @@ byte colPins[COLS] = {A3, A4, A5}; // Col pins: A3=col1, A4=col2, A5=col3
 
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
-// Encoder output pins (D2/D3 are free since matrix moved to A0-A5)
-#define PIN_ENCODER_FWD  2  // Encoder Forward
-#define PIN_ENCODER_BWD  3  // Encoder Backward
+// Encoder/Mute output pins - default (attivi quando mode è inattivo)
+#define PIN_ENCODER_FWD      2  // Encoder Forward
+#define PIN_ENCODER_BWD      3  // Encoder Backward
+
+// Mode monostabile e pin alternativi (attivi quando D4 è HIGH)
+#define PIN_MODE_MONO        4  // D4 - Uscita monostabile Mode (tasto 8)
+#define PIN_ENCODER_FWD_ALT  5  // D5 - Alt Encoder Forward  (quando D4 attivo)
+#define PIN_ENCODER_BWD_ALT  6  // D6 - Alt Encoder Backward (quando D4 attivo)
+#define PIN_MUTE_ALT         7  // D7 - Alt Mute             (quando D4 attivo)
 
 // Button output pins
 #define PIN_MUTE         8  // Mute       - Tasto 4 (A1+A3)
 #define PIN_SOURCE_PLUS  9  // Source +   - Tasto 5 (A1+A4)
 #define PIN_SOURCE_MINUS 10 // Source -   - Tasto 6 (A1+A5)
 #define PIN_VOL_PLUS     11 // Vol +      - Tasto 7 (A2+A3)
-#define PIN_MODE         12 // Mode ON/OFF - Tasto 8 (A2+A4)
 #define PIN_VOL_MINUS    13 // Vol -      - Tasto 9 (A2+A5)
+
+// Durata del monostabile D4 in ms
+#define MONOSTABLE_DURATION 150
 
 // Encoder position tracking
 // 0 = not yet initialized
@@ -35,20 +43,37 @@ Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 // Backward sequence: A->C->B->A  (1->3->2->1)
 int encoderPos = 0;
 
+// Stato monostabile D4
+bool modeActive = false;
+unsigned long modeStartTime = 0;
+
 void setup() {
   Serial.begin(9600);
+  // Pin default attivi: D2, D3, D8
   pinMode(PIN_ENCODER_FWD, OUTPUT);
   pinMode(PIN_ENCODER_BWD, OUTPUT);
   pinMode(PIN_MUTE, OUTPUT);
+  // D4 monostabile: inizia inattivo (LOW)
+  pinMode(PIN_MODE_MONO, OUTPUT);
+  digitalWrite(PIN_MODE_MONO, LOW);
+  // Pin alternativi D5, D6, D7: iniziano in alta impedenza
+  pinMode(PIN_ENCODER_FWD_ALT, INPUT);
+  pinMode(PIN_ENCODER_BWD_ALT, INPUT);
+  pinMode(PIN_MUTE_ALT, INPUT);
+  // Altri tasti
   pinMode(PIN_SOURCE_PLUS, OUTPUT);
   pinMode(PIN_SOURCE_MINUS, OUTPUT);
   pinMode(PIN_VOL_PLUS, OUTPUT);
-  pinMode(PIN_MODE, OUTPUT);
   pinMode(PIN_VOL_MINUS, OUTPUT);
   Serial.println("Sistema avviato - Mode OFF");
 }
 
 void loop() {
+  // Controlla scadenza monostabile D4 (gestione overflow millis())
+  if (modeActive && millis() - modeStartTime >= MONOSTABLE_DURATION) {
+    deactivateMode();
+  }
+
   char key = keypad.getKey();
   if (key != NO_KEY) {
     Serial.print("Tasto: ");
@@ -62,7 +87,7 @@ void loop() {
       case '5': electronicControl(PIN_SOURCE_PLUS);  Serial.println("Source +");  break;
       case '6': electronicControl(PIN_SOURCE_MINUS); Serial.println("Source -");  break;
       case '7': electronicControl(PIN_VOL_PLUS);     Serial.println("Vol +");     break;
-      case '8': electronicControl(PIN_MODE);         Serial.println("Mode");      break;
+      case '8': handleMode();                        Serial.println("Mode");      break;
       case '9': electronicControl(PIN_VOL_MINUS);    Serial.println("Vol -");     break;
     }
   }
@@ -113,7 +138,46 @@ void handleEncoder(int newPos) {
 }
 
 void electronicControl(int pin) {
-  digitalWrite(pin, HIGH);
-  delay(150);
-  digitalWrite(pin, LOW);
+  // Quando D4 è attivo, le funzioni D2/D3/D8 vengono instradate su D5/D6/D7
+  int activePin = pin;
+  if (modeActive) {
+    if (pin == PIN_ENCODER_FWD) activePin = PIN_ENCODER_FWD_ALT;
+    else if (pin == PIN_ENCODER_BWD) activePin = PIN_ENCODER_BWD_ALT;
+    else if (pin == PIN_MUTE)        activePin = PIN_MUTE_ALT;
+  }
+  digitalWrite(activePin, HIGH);
+  delay(MONOSTABLE_DURATION);
+  digitalWrite(activePin, LOW);
+}
+
+// Attiva D4 monostabile: D2/D3/D8 → alta impedenza, D5/D6/D7 → OUTPUT
+void handleMode() {
+  // D2, D3, D8 passano in alta impedenza
+  pinMode(PIN_ENCODER_FWD, INPUT);
+  pinMode(PIN_ENCODER_BWD, INPUT);
+  pinMode(PIN_MUTE, INPUT);
+  // D5, D6, D7 diventano uscite attive
+  pinMode(PIN_ENCODER_FWD_ALT, OUTPUT);
+  pinMode(PIN_ENCODER_BWD_ALT, OUTPUT);
+  pinMode(PIN_MUTE_ALT, OUTPUT);
+  // Attiva D4 monostabile e avvia il timer
+  modeActive = true;
+  modeStartTime = millis();
+  digitalWrite(PIN_MODE_MONO, HIGH);
+  Serial.println("Mode ON - D4 attivo, funzioni su D5/D6/D7");
+}
+
+// Disattiva D4: D5/D6/D7 → alta impedenza, D2/D3/D8 → OUTPUT
+void deactivateMode() {
+  modeActive = false;
+  digitalWrite(PIN_MODE_MONO, LOW);
+  // D5, D6, D7 tornano in alta impedenza
+  pinMode(PIN_ENCODER_FWD_ALT, INPUT);
+  pinMode(PIN_ENCODER_BWD_ALT, INPUT);
+  pinMode(PIN_MUTE_ALT, INPUT);
+  // D2, D3, D8 tornano uscite attive
+  pinMode(PIN_ENCODER_FWD, OUTPUT);
+  pinMode(PIN_ENCODER_BWD, OUTPUT);
+  pinMode(PIN_MUTE, OUTPUT);
+  Serial.println("Mode OFF - D4 inattivo, funzioni tornate su D2/D3/D8");
 }
